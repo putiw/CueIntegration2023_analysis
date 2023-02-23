@@ -100,12 +100,14 @@ nuisance =[nuisance; tmpr];
 end       
         
         %%
-showtimeseries(datafiles(1:5),dsCon(1:5),roimask{5}&R2>=40,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
-showtimeseries(datafiles(6:end),dsCon(6:end),roimask{5}&R2>=40,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
-showtimeseries(datafiles,dsCon,roimask{5}&R2>=40,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
+        whichRoi = 8;
+        R2min = 40;
+showtimeseries(datafiles(1:5),dsCon(1:5),roimask{whichRoi}&R2>=R2min,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
+showtimeseries(datafiles(6:end),dsCon(6:end),roimask{whichRoi}&R2>=R2min,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
+showtimeseries(datafiles,dsCon,roimask{whichRoi}&R2>=R2min,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
 
 for iRun = 1:10
-showtimeseries(datafiles(iRun),dsCon(iRun),roimask{5}&R2>=40,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
+showtimeseries(datafiles(iRun),dsCon(iRun),roimask{whichRoi}&R2>=R2min,10,[1 2;3 4;5 6;7 8],[-1.5 1.5],[])
 pause(2)
 end
 

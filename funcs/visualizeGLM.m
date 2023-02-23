@@ -1,4 +1,4 @@
-function visualizeGLM(sub,val,view,range,cutoff,filter,cmapc)
+function hcb=visualizeGLM(sub,val,view,range,cutoff,filter,cmapc)
 
 clf
 bins = min(range):((max(range)-min(range))/20):max(range);
@@ -28,8 +28,8 @@ plot(0,0);
 colormap(cmap0);
 hcb=colorbar('SouthOutside');
 hcb.Ticks = [0:0.5:1];
-hcb.TickLabels = {num2str(min(bins)),num2str(min(bins)+(max(bins)-min(bins))./2),num2str(max(bins))};
+%hcb.TickLabels = {num2str(min(bins)),num2str(min(bins)+(max(bins)-min(bins))./2),num2str(max(bins))};
 hcb.FontSize = 25
-hcb.Label.String = 'R2%'
+%hcb.Label.String = 'R2%'
 hcb.TickLength = 0.001;
 end
