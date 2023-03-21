@@ -1,4 +1,4 @@
-function [datafiles,roimask,R2,label,dsCon,dsTrial,dataDim,param] = init_decode(sub)
+function [datafiles,nuisance,roimask,R2,label,dsCon,dsTrial,dataDim,param] = init_decode(sub)
 
 %% setup path
 addpath(genpath(fullfile(pwd, 'funcs')));
@@ -42,7 +42,7 @@ for iRun = 1:numel(runNum)
 end
 datafiles = load_data(param.bids,param.task,'fsnative','.mgh',param.sub,param.ses,1:10);
 %%
-nuisance = cell(runNum,1);
+nuisance = cell(numel(runNum),1);
 for iRun = 1:numel(runNum)
     
     f1 = dir(sprintf('%s/%s/%s/*run-%s_*',param.drop,param.sub,param.ses,num2str(iRun)));
@@ -70,8 +70,8 @@ for iRun = 1:numel(runNum)
     if ~exist([tmpregressor '.csv'],'file')
         system([mv [tmpregressor '.tsv'] [tmpregressor '.csv']])
     end
-    tmpregressor = readtable(tmpregressor);
-    nuisance(iRun) = [tmpregressor.global_signal str2double(tmpregressor.global_signal_derivative1) tmpregressor.csf tmpregressor.global_signal_power2 tmpregressor.white_matter tmpregressor.trans_x str2double(tmpregressor.trans_x_derivative1) tmpregressor.trans_x_power2 tmpregressor.trans_y str2double(tmpregressor.trans_y_derivative1) tmpregressor.trans_y_power2 tmpregressor.trans_z str2double(tmpregressor.trans_z_derivative1) tmpregressor.trans_z_power2 tmpregressor.rot_x str2double(tmpregressor.rot_x_derivative1) tmpregressor.rot_x_power2 tmpregressor.rot_y str2double(tmpregressor.rot_y_derivative1) tmpregressor.rot_y_power2 tmpregressor.rot_z str2double(tmpregressor.rot_z_derivative1) tmpregressor.rot_z_power2 tmpregressor.a_comp_cor_00 tmpregressor.t_comp_cor_00];  
+    tmpregressor = readtable([tmpregressor '.csv']);
+    nuisance{iRun} = [tmpregressor.global_signal str2double(tmpregressor.global_signal_derivative1) tmpregressor.csf tmpregressor.global_signal_power2 tmpregressor.white_matter tmpregressor.trans_x str2double(tmpregressor.trans_x_derivative1) tmpregressor.trans_x_power2 tmpregressor.trans_y str2double(tmpregressor.trans_y_derivative1) tmpregressor.trans_y_power2 tmpregressor.trans_z str2double(tmpregressor.trans_z_derivative1) tmpregressor.trans_z_power2 tmpregressor.rot_x str2double(tmpregressor.rot_x_derivative1) tmpregressor.rot_x_power2 tmpregressor.rot_y str2double(tmpregressor.rot_y_derivative1) tmpregressor.rot_y_power2 tmpregressor.rot_z str2double(tmpregressor.rot_z_derivative1) tmpregressor.rot_z_power2 tmpregressor.a_comp_cor_00 tmpregressor.t_comp_cor_00];  
     
 end
 label = cat(1,design{:});

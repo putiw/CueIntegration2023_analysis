@@ -1,41 +1,46 @@
+% 1. load data
+% 2. initialize paramters
+% 3. high-pass filter
+% 4. regressout global signals and nuisance motion regressors
+% 5. z-normalize within each nth TR after onsets and then average
+% 6. feature selection/extraction - mRMR and weighted average
+% 7. binary decode using SVM/KNN
+% 8. visualize
+
+
+%% load data, nuisance regressors, design matrices, rois, size, etc
+
 clear all;close all;clc;
-% load data, design matrix, 
 [datafiles,nuisance,roimask,R2,label,dsCon,dsTrial,dataDim,param] = init_decode('sub-0248');
-%%
-% Define the sampling rate (TR) and data
 TR = 1; % dur of TR in secs
-opt.k = 450; % Specify the number of features to select using mRMR
-opt.nVol = 100;
-opt.nTestTrials = 2; % Define number of testing trials per class
-opt.nReps = 200;% Define number of repetitions
+
+%% Set the knobs
+
+opt.whichTR = 6:9; % which TR after onset to use for decode
+opt.cutoffFreq = 0.025;  % Define the cutoff high-pass frequency (in Hz)
+opt.nTestTrials = 2; % define number of testing trials per class
+opt.nReps = 200;% define number of repetitions
 opt.MRMR = 0; % use MRMR or not
+opt.k = 450; % specify the number of features to select using mRMR
 opt.wAvg = 0; % use weighted average or not
-% conNow = 4;
-acc = zeros(nReps,4,numel(param.roi));
+opt.nVol = 100; % number of top important features to use for weighted average
+
+%% decode
 tic
-for conNow = 1:4
-    for iROI = 1:numel(param.roi)
+acc = zeros(opt.nReps,4,numel(param.roi));
+for iCon = 1:4 % loop through different cue conditions 
+    for iRoi = 1:numel(param.roi)
         
-        tmp = zeros(size(label,1)/4,sum(roimask{iROI}));
+        tmp = zeros(size(label,1)/4,sum(roimask{iRoi}));
+        
         for iRun = 1:10
-            data = datafiles{iRun}(roimask{iROI},:)';
-            % Compute the power spectrum
             
-            %     [P,f] = pwelch(data,[],[],[],1/TR);
-            %
-            %     % Plot the power spectrum
-            %     semilogy(f,P);
-            %     xlabel('Frequency (Hz)');
-            %     ylabel('Power');
-            
-            % High-pass frequency
-            % Define the cutoff frequency (in Hz)
-            opt.cutoffFreq = 0.025;  %0.025
-            
+            data = datafiles{iRun}(roimask{iRoi},:)';
+
             % Define the filter parameters
             nyquist_freq = 1/(2*TR);
             filter_order = 2;
-            Wn = cutoff_freq/nyquist_freq;
+            Wn = opt.cutoffFreq/nyquist_freq;
             
             % Create the high-pass filter
             [b,a] = butter(filter_order,Wn,'high');
@@ -61,8 +66,8 @@ for conNow = 1:4
             % calculate the residuals
             regressed_data = filtered_data - X * coefficients;
             %
-            opt.whichTR = 6:9;
-            dmS = sum(dsCon{iRun}(:,[conNow*2-1 conNow*2]),2);
+            
+            dmS = sum(dsCon{iRun}(:,[iCon*2-1 iCon*2]),2);
             tmpp = zeros(sum(dmS),size(regressed_data,2),numel(opt.whichTR));
             cn = 1;
             for iT = opt.whichTR
@@ -70,18 +75,18 @@ for conNow = 1:4
                 cn = cn+1;
             end
             
-            tmp(iRun*sum(dmS)-sum(dmS)+1:iRun*sum(dmS),:)=mean(tmpp,3);
+            tmp(iRun*sum(dmS)-sum(dmS)+1:iRun*sum(dmS),:)=mean(tmpp,3); % average z-scores for the seclected TRs
             
             
         end
         
-        lb = label(label(:,5)==conNow,3);
+        currentLabel = label(label(:,5)==iCon,3);
         
-        class1_data = tmp(lb==1,:);
-        class2_data =  tmp(lb==2,:);
+        dataClass1 = tmp(currentLabel==1,:); % away
+        dataClass2 =  tmp(currentLabel==2,:); % toward
         
         % Define data dimensions
-        nTrials = size(class1_data,1);
+        nTrials = size(dataClass1,1); % how many trials do we have for each class
         
         
         for rep = 1:opt.nReps
@@ -94,9 +99,9 @@ for conNow = 1:4
             % %
             
             % Separate training and testing data
-            trainData = [class1_data(whichTrain1, :); class2_data(whichTrain2, :)];
+            trainData = [dataClass1(whichTrain1, :); dataClass2(whichTrain2, :)];
             trainLabels = [ones(nTrials-opt.nTestTrials,1); 2*ones(nTrials-opt.nTestTrials,1)];
-            testData = [class1_data(whichTest1, :); class2_data(whichTest2, :)];
+            testData = [dataClass1(whichTest1, :); dataClass2(whichTest2, :)];
             testLabels = [ones(opt.nTestTrials,1); 2*ones(opt.nTestTrials,1)];
             
             
@@ -154,7 +159,7 @@ for conNow = 1:4
             
             
             %%
-            %         figure(conNow);clf;hold on;
+            %         figure(iCon);clf;hold on;
             %         scatter(trainData(trainLabels==1,1),trainData(trainLabels==1,2),'r','filled');
             %         scatter(trainData(trainLabels==2,1),trainData(trainLabels==2,2),'b','filled');
             %         scatter(testData(testLabels==1,1),testData(testLabels==1,2),'r','filled');
@@ -164,7 +169,7 @@ for conNow = 1:4
             % Train and test SVM classifier
             svm_model = fitcsvm(trainData, trainLabels);
             svm_predicted_labels = predict(svm_model, testData);
-            acc(rep,conNow,iROI) = mean(svm_predicted_labels == testLabels);
+            acc(rep,iCon,iRoi) = mean(svm_predicted_labels == testLabels);
             
             squeeze(mean(acc(1:rep,:,:)))
             %
@@ -181,7 +186,7 @@ for conNow = 1:4
             %
             %         svm_predicted_labels = predict(svm_model, testData);
             %
-            %         acc(rep,2,iROI) = mean(svm_predicted_labels == testLabels);
+            %         acc(rep,2,iRoi) = mean(svm_predicted_labels == testLabels);
             %
             %         classificationKNN = fitcknn(...
             %             trainData, ...
@@ -196,7 +201,7 @@ for conNow = 1:4
             %
             %         svm_predicted_labels = predict(classificationKNN, testData);
             %
-            %         acc(rep,iROI) = mean(svm_predicted_labels == testLabels);
+            %         acc(rep,iRoi) = mean(svm_predicted_labels == testLabels);
             %
             
             %         classificationNaiveBayes = fitcnb(...
@@ -209,12 +214,12 @@ for conNow = 1:4
             %
             %      svm_predicted_labels = predict(classificationNaiveBayes, testData);
             %
-            %         acc(rep,4,iROI) = mean(svm_predicted_labels == testLabels);
+            %         acc(rep,4,iRoi) = mean(svm_predicted_labels == testLabels);
         end
         
         % Report average decoding accuracies
-        %     fprintf('Average SVM decoding accuracy: %.2f%%\n', mean(acc(:,iROI))*100);
-        %     fprintf('Average gaussian SVM decoding accuracy: %.2f%%\n', mean(acc(:,2,iROI))*100);
+        %     fprintf('Average SVM decoding accuracy: %.2f%%\n', mean(acc(:,iRoi))*100);
+        %     fprintf('Average gaussian SVM decoding accuracy: %.2f%%\n', mean(acc(:,2,iRoi))*100);
         %
     end
 end
