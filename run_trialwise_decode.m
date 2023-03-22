@@ -7,25 +7,23 @@
 % 7. binary decode using SVM/KNN
 % 8. visualize
 
-
 %% load data, nuisance regressors, design matrices, rois, size, etc
 
 clear all;close all;clc;
-[datafiles,nuisance,roimask,R2,label,dsCon,dsTrial,dataDim,param] = init_decode('sub-0248');
-TR = 1; % dur of TR in secs
+[datafiles,nuisance,roimask,R2,label,dsCon,dsTrial,dataDim,param] = init_decode('sub-0201');
 
 %% Set the knobs
-
-opt.whichTR = 6:9; % which TR after onset to use for decode
+opt.whichTR = 6:9; %6:9; % which TR after onset to use for decode
 opt.cutoffFreq = 0.025;  % Define the cutoff high-pass frequency (in Hz)
-opt.nTestTrials = 2; % define number of testing trials per class
-opt.nReps = 200;% define number of repetitions
-opt.MRMR = 0; % use MRMR or not
+opt.nuisance = 1; % regress out nuisance regressor or not
+opt.nTestTrials = 3; % define number of testing trials per class
+opt.nReps = 50;% define number of repetitions
+opt.MRMR = 1; % use MRMR or not
 opt.k = 450; % specify the number of features to select using mRMR
-opt.wAvg = 0; % use weighted average or not
+opt.wAvg = 1; % use weighted average or not
 opt.nVol = 100; % number of top important features to use for weighted average
 
-%% decode
+% decode
 tic
 acc = zeros(opt.nReps,4,numel(param.roi));
 for iCon = 1:4 % loop through different cue conditions 
@@ -38,7 +36,7 @@ for iCon = 1:4 % loop through different cue conditions
             data = datafiles{iRun}(roimask{iRoi},:)';
 
             % Define the filter parameters
-            nyquist_freq = 1/(2*TR);
+            nyquist_freq = 1/(2*param.trDur);
             filter_order = 2;
             Wn = opt.cutoffFreq/nyquist_freq;
             
@@ -47,18 +45,18 @@ for iCon = 1:4 % loop through different cue conditions
             
             % Apply the filter to the data
             filtered_data = filtfilt(b,a,data);
+            
             % Regress out noise
-            nuisance = [];
-            tmpregressor = [param.bids '/derivatives/fmriprep/' param.sub '/' param.ses '/func/' param.sub '_' param.ses '_task-' param.task '_run-' num2str(iRun) '_desc-confounds_timeseries.csv'];
-            tmpregressor = readtable(tmpregressor);
-            tmpN = [tmpregressor.global_signal str2double(tmpregressor.global_signal_derivative1) tmpregressor.csf tmpregressor.global_signal_power2 tmpregressor.white_matter tmpregressor.trans_x str2double(tmpregressor.trans_x_derivative1) tmpregressor.trans_x_power2 tmpregressor.trans_y str2double(tmpregressor.trans_y_derivative1) tmpregressor.trans_y_power2 tmpregressor.trans_z str2double(tmpregressor.trans_z_derivative1) tmpregressor.trans_z_power2 tmpregressor.rot_x str2double(tmpregressor.rot_x_derivative1) tmpregressor.rot_x_power2 tmpregressor.rot_y str2double(tmpregressor.rot_y_derivative1) tmpregressor.rot_y_power2 tmpregressor.rot_z str2double(tmpregressor.rot_z_derivative1) tmpregressor.rot_z_power2 tmpregressor.a_comp_cor_00 tmpregressor.t_comp_cor_00];
-            opt.nuisance = [nuisance;tmpN];
+            tmpNuisance = [];
+            if opt.nuisance == 1    
+                tmpNuisance = nuisance{iRun};
+            end
             
             % calculate the mean time series (global signal)
             global_signal = mean(filtered_data, 2);
             
             % create the design matrix for regression
-            X = [ones(size(global_signal)), global_signal,nuisance];
+            X = [ones(size(global_signal)), global_signal,tmpNuisance];
             X(isnan(X))=0;
             % perform regression
             coefficients = X \ filtered_data;
@@ -72,11 +70,11 @@ for iCon = 1:4 % loop through different cue conditions
             cn = 1;
             for iT = opt.whichTR
                 tmpp(:,:,cn)= zscore(regressed_data(find(dmS)-1+iT,:));
+                %tmpp(:,:,cn)= regressed_data(find(dmS)-1+iT,:);
                 cn = cn+1;
             end
             
-            tmp(iRun*sum(dmS)-sum(dmS)+1:iRun*sum(dmS),:)=mean(tmpp,3); % average z-scores for the seclected TRs
-            
+            tmp(iRun*sum(dmS)-sum(dmS)+1:iRun*sum(dmS),:)=mean(tmpp,3); % average z-scores for the seclected TRs           
             
         end
         
@@ -123,8 +121,9 @@ for iCon = 1:4 % loop through different cue conditions
                 [~, whichFeatures] = sort(MRMR, 'descend');
                 
                 % Subset the data to include only the selected features
-                trainData =  trainData(:,whichFeatures(1:opt.k));
-                testData =  testData(:,whichFeatures(1:opt.k));
+                k = max(opt.k,size(trainData,2));
+                trainData =  trainData(:,whichFeatures(1:k));
+                testData =  testData(:,whichFeatures(1:k));
             end
             
             if opt.wAvg == 1
@@ -167,9 +166,16 @@ for iCon = 1:4 % loop through different cue conditions
             %         %%
             
             % Train and test SVM classifier
-            svm_model = fitcsvm(trainData, trainLabels);
-            svm_predicted_labels = predict(svm_model, testData);
-            acc(rep,iCon,iRoi) = mean(svm_predicted_labels == testLabels);
+            mymodel = fitcsvm(trainData, trainLabels);
+           % svm_model = fitcsvm(trainData, trainLabels(randperm(size(trainLabels,1),size(trainLabels,1))));
+            %mymodel = fitcnb(trainData, trainLabels);
+            %mymodel = fitcknn(trainData,trainLabels);
+            predictLabels = predict(mymodel, testData);
+            
+            
+          %  predictLabels = classify(testData,trainData,trainLabels,'diaglinear');
+            
+            acc(rep,iCon,iRoi) = mean(predictLabels == testLabels);
             
             squeeze(mean(acc(1:rep,:,:)))
             %
@@ -184,9 +190,9 @@ for iCon = 1:4 % loop through different cue conditions
             %     'ClassNames', [1; 2]);
             %
             %
-            %         svm_predicted_labels = predict(svm_model, testData);
+            %         predictLabels = predict(svm_model, testData);
             %
-            %         acc(rep,2,iRoi) = mean(svm_predicted_labels == testLabels);
+            %         acc(rep,2,iRoi) = mean(predictLabels == testLabels);
             %
             %         classificationKNN = fitcknn(...
             %             trainData, ...
@@ -199,9 +205,9 @@ for iCon = 1:4 % loop through different cue conditions
             %             'ClassNames', [1; 2]);
             %
             %
-            %         svm_predicted_labels = predict(classificationKNN, testData);
+            %         predictLabels = predict(classificationKNN, testData);
             %
-            %         acc(rep,iRoi) = mean(svm_predicted_labels == testLabels);
+            %         acc(rep,iRoi) = mean(predictLabels == testLabels);
             %
             
             %         classificationNaiveBayes = fitcnb(...
@@ -212,9 +218,9 @@ for iCon = 1:4 % loop through different cue conditions
             %         'DistributionNames', repmat({'Kernel'}, 1, 2), ...
             %         'ClassNames', [1; 2]);
             %
-            %      svm_predicted_labels = predict(classificationNaiveBayes, testData);
+            %      predictLabels = predict(classificationNaiveBayes, testData);
             %
-            %         acc(rep,4,iRoi) = mean(svm_predicted_labels == testLabels);
+            %         acc(rep,4,iRoi) = mean(predictLabels == testLabels);
         end
         
         % Report average decoding accuracies
@@ -225,20 +231,23 @@ for iCon = 1:4 % loop through different cue conditions
 end
 
 toc
-%%
+%
 close all
+barcolor = [251 176 59; 247 147 30; 0 113 188; 0 146 69]./255;
 f2 = figure('Position', [100, 100, 500, 250]);
 hold on
 accuracy = squeeze(mean(acc)).*100,squeeze(std(acc))';
 stderr = squeeze(std(acc))./sqrt(opt.nReps-1).*100';
 b1 = bar(1:numel(param.roi),accuracy,'EdgeColor','none');
 for ii = 1:numel(b1)
+    b1(ii).FaceColor =  barcolor(ii,:);
+    b1(ii).FaceAlpha = 0.8;
     line([b1(ii).XEndPoints; b1(ii).XEndPoints],[accuracy(ii,:)+stderr(ii,:);accuracy(ii,:)-stderr(ii,:)],'Color', 'k', 'LineWidth', 1);
 end
 plot([0.4 numel(param.roi)+0.6],[50 50],'k--','LineWidth',1)
 xticks(1:numel(param.roi))
 xticklabels(param.roi);
-ylim([30 80]);
+ylim([30 100]);
 xlim([0.4 numel(param.roi)+0.6])
 ylabel('Decoding accuracy (%)');
 xlabel('ROIs');

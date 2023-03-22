@@ -18,18 +18,17 @@ param.task = 'cue';
 
 runNum = 1:10;
 trNum = 360;
-trDur = 1;
+param.trDur = 1;
 stimDur = 1;
 dsCon = cell(numel(runNum),1);
 datafiles = cell(numel(runNum),1);
 dsTrial = cell(numel(runNum),1);
 design = cell(numel(runNum),1);
 dsConAll = [];
-hrf = getcanonicalhrf(stimDur,trDur);
+hrf = getcanonicalhrf(stimDur,param.trDur);
 dataDim = valstruct_create(param.sub);
 baseline = 100;
-ind = 1:9:360;
-
+TR = 1; % dur of TR in secs
 %% load data (gii to mgh)
 for iRun = 1:numel(runNum)
     for iH = 1:numel(hemi)
@@ -40,7 +39,7 @@ for iRun = 1:numel(runNum)
         end
     end
 end
-datafiles = load_data(param.bids,param.task,'fsnative','.mgh',param.sub,param.ses,1:10);
+datafiles = load_data(param.bids,param.task,'fsnative','.mgh',param.sub,param.ses,runNum);
 %%
 nuisance = cell(numel(runNum),1);
 for iRun = 1:numel(runNum)
@@ -51,6 +50,8 @@ for iRun = 1:numel(runNum)
     dsTrial{iRun} = f1.pa.dsTrial;
     design{iRun} = f1.pa.design;
     if isempty(datafiles) % simulate data if no data file
+                ind = 1:(f1.pa.trialDuration+f1.pa.ITI)./param.TR:(trNum-f1.pa.pause/param.TR);    
+
         neuralActivity = zeros(trNum,1);
         neuralActivity(ind) = (f1.pa.design(:,3)-1)*10+f1.pa.design(:,5);
         neuralActivity(neuralActivity==5|neuralActivity==10)=0;
